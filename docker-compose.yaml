@@ -16,5 +16,5 @@ services:
       - ./deploy:/usr/local/apache2/htdocs:ro
       - ./my-extra.conf:/usr/local/apache2/conf.d/my-extra.conf:ro
     ports:
-      - "8500:80"
+      - "${WEB_PORT:-8500}:80"
     restart: unless-stopped

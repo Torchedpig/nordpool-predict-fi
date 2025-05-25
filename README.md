@@ -20,7 +20,7 @@ The original project was designed as a standalone script. This version automates
 
 ## Quick Start
 
-This version is designed to run inside Docker. To get started:
+This version is designed to run inside Docker and will serve the web UI and data files locally on your machine.
 
 1. **Configure Environment:**  
    Update the `.env.local` file (based on `.env.local.template`) for your environment settings. In particular, adjust:
@@ -39,6 +39,18 @@ This version is designed to run inside Docker. To get started:
 This command launches two services:
 - **app service:** Continuously runs predictions.
 - **web service:** Serves static files from the `deploy` folder (via Apache httpd).
+
+---
+
+## Accessing the Web UI Locally
+
+After running `docker-compose up`, the web service will be available at:
+
+- [http://localhost:8500](http://localhost:8500)
+
+By default, the static files (including the UI and all JSON data) are served on port **8500**. You can open this address in your browser to view the prediction dashboard and data.
+
+If you want to change the port, edit the `WEB_PORT` variable in your `.env.local` file (see below) and also update the `docker-compose.yaml` file under the `ports` section for the `web` service to match.
 
 ---
 
