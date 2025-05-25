@@ -2,6 +2,13 @@
 
 All notable changes will be documented in this file.
 
+## [2025-05-25] - Dockerization and Fork Update
+### Added
+- Docker support with a new Dockerfile and docker-compose.yaml to orchestrate two services:
+  - The `app` service that runs predictions in a loop with a configurable delay (`DELAY_TIME`).
+  - The `web` service that serves static assets from the deploy folder via Apache httpd.
+- Documentation updates in README.md to reflect the new Dockerization features.
+- Marked repository as a fork of the original project with additional enhancements.
 
 ## [2025-05-11] - Price Scaling and Volatility
 ### Added

@@ -12,7 +12,7 @@ var baseUrl = (function() {
     switch (window.location.hostname) {
         case "":
         case "localhost":
-            return "http://localhost:5005";
+            return "http://localhost:8500";
         case "rpi4":
             return "http://rpi4:5000";
         case "nordpool-predict-fi.web.app":
@@ -348,13 +348,12 @@ function createBaseChartOptions(config) {
 function updateMarkerPosition(chart) {
     var currentTime = new Date().getTime();
     var option = chart.getOption();
-    
+    if (!option || !option.series) return; // Defensive: avoid errors if option is undefined
     option.series.forEach((series) => {
         if (series.markLine) {
             series.markLine.data = [{ xAxis: currentTime }];
         }
     });
-    
     chart.setOption(option, false, false);
 }
 

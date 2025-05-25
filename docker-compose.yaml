@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    volumes:
+      - ./:/app  # Bind the whole project
+    env_file:
+      - .env.local
+    restart: unless-stopped
+    # No ports exposed since this service runs predictions only
+
+  web:
+    image: httpd:2.4
+    volumes:
+      - ./deploy:/usr/local/apache2/htdocs:ro
+      - ./my-extra.conf:/usr/local/apache2/conf.d/my-extra.conf:ro
+    ports:
+      - "8500:80"
+    restart: unless-stopped
