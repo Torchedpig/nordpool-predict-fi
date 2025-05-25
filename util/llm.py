@@ -26,14 +26,36 @@ load_dotenv(".env.local")
 LLM_API_BASE = os.getenv("LLM_API_BASE", None)
 LLM_API_KEY = os.getenv("LLM_API_KEY", None)
 LLM_MODEL = os.getenv("LLM_MODEL", None)
+OLLAMA_API_BASE = os.getenv("OLLAMA_API_BASE", None)
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", None)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", None)
+VLLM_API_BASE = os.getenv("VLLM_API_BASE", None)
+VLLM_MODEL = os.getenv("VLLM_MODEL", None)
+VLLM_MAX_TOKENS = int(os.getenv("VLLM_MAX_TOKENS", 1536))
 
-if None in (LLM_API_BASE, LLM_API_KEY, LLM_MODEL):
+# Determine which LLM provider to use
+if LLM_PROVIDER == "openai":
+    if not (LLM_MODEL and LLM_API_BASE and LLM_API_KEY):
+        logger.error("LLM_PROVIDER is set to 'openai' but required OpenAI/DeepSeek variables are missing.")
+        sys.exit(1)
+    llm_provider = "openai"
+elif LLM_PROVIDER == "ollama":
+    if not (OLLAMA_MODEL and OLLAMA_API_BASE):
+        logger.error("LLM_PROVIDER is set to 'ollama' but required Ollama variables are missing.")
+        sys.exit(1)
+    llm_provider = "ollama"
+elif LLM_PROVIDER == "vllm":
+    if not (VLLM_MODEL and VLLM_API_BASE):
+        logger.error("LLM_PROVIDER is set to 'vllm' but required vLLM variables are missing.")
+        sys.exit(1)
+    llm_provider = "vllm"
+else:
     logger.error(
-        "LLM API credentials not found in .env.local, can't narrate, will exit. See .env.template for a sample."
+        "LLM_PROVIDER must be set to 'openai', 'ollama', or 'vllm' in .env.local."
     )
     sys.exit(1)
 
-logger.debug(f"LLM conf: '{LLM_API_BASE}': '{LLM_MODEL}'")
+logger.debug(f"LLM conf: provider={llm_provider}, base='{LLM_API_BASE or OLLAMA_API_BASE}', model='{LLM_MODEL or OLLAMA_MODEL}'")
 
 # region spike risk
 def spike_price_risk(df):
@@ -315,11 +337,31 @@ def llm_generate(df_daily, df_intraday, helsinki_tz, deploy=False, commit=False)
 
     prompt += "</data>\n"
 
-    prompt += narration_prompt.format(LLM_MODEL=LLM_MODEL)
+    # Choose prompt template based on env variable only
+    if os.getenv("SIMPLE_LLM_PROMPT", "0") == "1":
+        # Compose a minimal summary for the simple prompt
+        min_price = df_daily['PricePredict_cpkWh_min'].min()
+        max_price = df_daily['PricePredict_cpkWh_max'].max()
+        mean_price = df_daily['PricePredict_cpkWh_mean'].mean()
+        min_wind = df_daily['WindPowerMW_min'].min()
+        max_wind = df_daily['WindPowerMW_max'].max()
+        # Pick the correct model name for the signature
+        model_name = OLLAMA_MODEL if llm_provider == "ollama" else VLLM_MODEL if llm_provider == "vllm" else LLM_MODEL
+        prompt = simple_narration_prompt.format(
+            MIN_PRICE=f"{min_price:.1f}",
+            MAX_PRICE=f"{max_price:.1f}",
+            MEAN_PRICE=f"{mean_price:.1f}",
+            MIN_WIND=f"{min_wind:.0f}",
+            MAX_WIND=f"{max_wind:.0f}",
+            MODEL_NAME=model_name
+        )
+        messages = [{"role": "user", "content": prompt}]
+    else:
+        model_name = OLLAMA_MODEL if llm_provider == "ollama" else VLLM_MODEL if llm_provider == "vllm" else LLM_MODEL
+        prompt += narration_prompt.format(MODEL_NAME=model_name)
+        messages = [{"role": "user", "content": prompt}]
 
     logger.info(prompt)
-
-    messages = [{"role": "user", "content": prompt}]
 
     # region _llm()
     def llm_call(messages):
@@ -331,15 +373,53 @@ def llm_generate(df_daily, df_intraday, helsinki_tz, deploy=False, commit=False)
             logger.debug(
                 f"llm_call(): '{LLM_API_BASE}': '{LLM_MODEL}': payload: {len(messages)} messages"
             )
-            response = client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1536,
-                stream=False,
-            )
-            
-            return response.choices[0].message.content
+            if llm_provider == "openai":
+                response = client.chat.completions.create(
+                    model=LLM_MODEL,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=1536,
+                    stream=False,
+                )
+                return response.choices[0].message.content
+            elif llm_provider == "ollama":
+                import requests
+                url = f"{OLLAMA_API_BASE}/api/chat" if not OLLAMA_API_BASE.rstrip("/").endswith("api/chat") else OLLAMA_API_BASE
+                payload = {
+                    "model": OLLAMA_MODEL,
+                    "messages": messages,
+                    "options": {"temperature": 0.7, "num_predict": 1536},
+                    "stream": False
+                }
+                try:
+                    r = requests.post(url, json=payload, timeout=120)
+                    r.raise_for_status()
+                    data = r.json()
+                    return data["message"]["content"]
+                except Exception as e:
+                    logger.error(f"Ollama API call failed: {e}", exc_info=True)
+                    raise e
+            elif llm_provider == "vllm":
+                import requests
+                url = f"{VLLM_API_BASE}/chat/completions" if not VLLM_API_BASE.rstrip("/").endswith("chat/completions") else VLLM_API_BASE
+                payload = {
+                    "model": VLLM_MODEL,
+                    "messages": messages,
+                    "max_tokens": VLLM_MAX_TOKENS,
+                    "temperature": 0.7,
+                    "stream": False
+                }
+                headers = {"Authorization": f"Bearer {LLM_API_KEY}"} if LLM_API_KEY else {}
+                try:
+                    r = requests.post(url, json=payload, headers=headers, timeout=120)
+                    r.raise_for_status()
+                    data = r.json()
+                    return data["choices"][0]["message"]["content"]
+                except Exception as e:
+                    logger.error(f"vLLM API call failed: {e}", exc_info=True)
+                    raise e
+            else:
+                raise RuntimeError("No valid LLM provider configured.")
         except Exception as e:
             logger.error(f"LLM API call failed: {e}", exc_info=True)
             logger.info(f"LLM API call failed: {e}")
@@ -409,6 +489,17 @@ def llm_generate(df_daily, df_intraday, helsinki_tz, deploy=False, commit=False)
         logger.info(narration)
 
     return narration
+
+# Simple prompt for small local models
+simple_narration_prompt = (
+    "Arvioi lyhyesti Nordpoolin pörssisähkön hintaa Suomessa seuraavalle viikolle. Tässä tärkeimmät luvut:\n"
+    "- Viikon alin hinta: {MIN_PRICE} ¢/kWh\n"
+    "- Viikon ylin hinta: {MAX_PRICE} ¢/kWh\n"
+    "- Viikon keskihinta: {MEAN_PRICE} ¢/kWh\n"
+    "- Viikon alin tuulivoima: {MIN_WIND} MW\n"
+    "- Viikon ylin tuulivoima: {MAX_WIND} MW\n\n"
+    "Vastaa vain yhdellä tiiviillä suomenkielisellä kappaleella. Älä lisää ohjeita, taulukoita tai ylimääräistä."
+)
 
 if __name__ == "__main__":
     logger.info(f"This is not meant to be executed directly.")

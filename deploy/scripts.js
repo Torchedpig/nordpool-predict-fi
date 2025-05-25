@@ -7,21 +7,29 @@ if (window.location.hostname === "nordpool-predict-fi.web.app") {
 // Base configuration and environment detection
 // ==========================================================================
 
+var productionDomain = (window.PRODUCTION_DOMAIN || window.env?.PRODUCTION_DOMAIN || "nordpool-predict-fi.web.app");
+
 // Determine base URL based on hosting environment
 var baseUrl = (function() {
-    switch (window.location.hostname) {
-        case "":
-        case "localhost":
-            return "http://localhost:8500";
-        case "rpi4":
-            return "http://rpi4:5000";
-        case "nordpool-predict-fi.web.app":
-            return "https://nordpool-predict-fi.web.app";
-        case "sahkovatkain.web.app":
-            return "https://sahkovatkain.web.app";
-        default:
-            return "https://raw.githubusercontent.com/vividfog/nordpool-predict-fi/main/deploy";
+    // Always use LAN/local server if not on a known production domain
+    const port = 8500;
+    const host = window.location.hostname;
+    if (host === "" || host === "localhost") {
+        return `http://localhost:${port}`;
     }
+    // Try to use LAN IP if not on localhost or production
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+        return `http://${host}:${port}`;
+    }
+    // Production domain from env
+    if (host === productionDomain) {
+        return `https://${productionDomain}`;
+    }
+    if (host === "sahkovatkain.web.app") {
+        return "https://sahkovatkain.web.app";
+    }
+    // Default: use LAN-accessible server at port 8500
+    return `http://${host}:${port}`;
 })();
 
 //#region utils
@@ -675,7 +683,7 @@ Promise.all([
 
         // Get start of today in local time
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0);
         const todayTimestamp = today.getTime();
 
         // Filter and prepare wind power series data (convert to GW)
