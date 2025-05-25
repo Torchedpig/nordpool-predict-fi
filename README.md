@@ -41,6 +41,9 @@ All settings are controlled via environment variables. See `.env.local.template`
 - `SIMPLE_LLM_PROMPT=1` for a short/simple prompt (good for small/local models)
 - `SIMPLE_LLM_PROMPT=0` for the full, detailed prompt (default)
 
+**Timezone:**
+- `TZ`: Timezone for the container (default: `Europe/Helsinki`). You can override this in `.env.local` or `docker-compose.yaml` if needed. Example: `TZ=UTC`
+
 ---
 
 ## LLM Model Attribution
