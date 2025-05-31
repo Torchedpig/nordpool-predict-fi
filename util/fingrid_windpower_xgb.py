@@ -233,6 +233,50 @@ def update_windpower(df, fingrid_api_key):
     # Prepare historic data for training from the database
     db_path = os.getenv('DB_PATH', 'data/prediction.db')
     historical_df = db_query_all(db_path)
+
+    # Ensure historical_df has all FMI columns expected from the environment, adding them with NaN if missing.
+    # This aligns its FMI column structure with merged_df (derived from df_recent, which already underwent this).
+    # fmisid_ws_env = os.getenv('FMISID_WS') # Not needed directly, rely on df columns
+    # fmisid_t_env = os.getenv('FMISID_T') # Not needed directly, rely on df columns
+    
+    # Determine the actual FMI columns present in the incoming df (which is df_recent from the main script)
+    # These are the columns that should be expected in historical_df for consistency.
+    actual_fmi_cols_in_input_df = [col for col in df.columns if col.startswith(('ws_', 't_')) and df[col].notna().any()]
+    logger.info(f"FMI columns considered from input df for historical alignment: {actual_fmi_cols_in_input_df}")
+
+    if not historical_df.empty:
+        for col_name in actual_fmi_cols_in_input_df:
+            if col_name not in historical_df.columns:
+                logger.info(f"Adding missing FMI column '{col_name}' to historical_df with np.nan")
+                historical_df[col_name] = np.nan
+        
+        fmi_cols_in_historical = [col for col in historical_df.columns if col.startswith(('ws_', 't_'))]
+        cols_to_drop_from_historical = set(fmi_cols_in_historical) - set(actual_fmi_cols_in_input_df)
+        if cols_to_drop_from_historical:
+            logger.info(f"Dropping FMI columns from historical_df not present in current input df: {cols_to_drop_from_historical}")
+            historical_df.drop(columns=list(cols_to_drop_from_historical), inplace=True, errors='ignore')
+            
+    elif not actual_fmi_cols_in_input_df:
+        logger.info("Historical DataFrame is empty and no relevant FMI columns in input df. Proceeding with empty historical_df.")
+        # historical_df remains empty or as loaded if it was already empty.
+    else: # historical_df is empty but actual_fmi_cols_in_input_df is not
+        logger.info(f"Historical DataFrame is empty. Will be initialized with FMI columns from input df: {actual_fmi_cols_in_input_df}")
+        historical_df = pd.DataFrame(columns=actual_fmi_cols_in_input_df + ['timestamp']) # Ensure timestamp for concat
+        # Ensure correct dtypes if possible, though concat handles much of this.
+        # For FMI columns, they will be object/float. Timestamp should be datetime.
+        if 'timestamp' in historical_df.columns:
+            historical_df['timestamp'] = pd.to_datetime(historical_df['timestamp'])
+
+    # Ensure timestamp is present and datetime for concatenation, especially if historical_df was just created
+    if 'timestamp' not in historical_df.columns and not historical_df.empty:
+        # This case should ideally not happen if historical_df is from db_query_all or created above
+        logger.warning("Timestamp column missing in historical_df before concat. This is unexpected.")
+    elif 'timestamp' in historical_df.columns:
+        historical_df['timestamp'] = pd.to_datetime(historical_df['timestamp'], utc=True)
+
+    # Ensure merged_df also has timestamp as datetime with UTC for consistent concatenation
+    merged_df['timestamp'] = pd.to_datetime(merged_df['timestamp'], utc=True)
+
     df_training = pd.concat([historical_df, merged_df]).drop_duplicates(subset=['timestamp'], keep='last').reset_index(drop=True)
 
     # Train on real-data time range only
@@ -257,25 +301,46 @@ def update_windpower(df, fingrid_api_key):
     # Inference for missing rows
     missing_mask = merged_df['WindPowerMW'].isnull()
     if missing_mask.any():
-        t_cols = sorted([col for col in df_training.columns if col.startswith('t_')])
-        features = {}
-        for ws_col in ws_cols:
-            features[ws_col] = merged_df.loc[missing_mask, ws_col]
-        for t_col in t_cols:
-            features[t_col] = merged_df.loc[missing_mask, t_col]
+        # Dynamically determine ws_cols and t_cols from the columns available in merged_df at this point
+        current_ws_cols = sorted([col for col in merged_df.columns if (col.startswith('ws_') or col.startswith('eu_ws_')) and merged_df[col].notna().any()])
+        current_t_cols = sorted([col for col in merged_df.columns if col.startswith('t_') and merged_df[col].notna().any()])
+        
+        logger.info(f"FMI WS columns for inference: {current_ws_cols}")
+        logger.info(f"FMI T columns for inference: {current_t_cols}")
+
+        features_for_inference = {}
+        for ws_col in current_ws_cols:
+            if ws_col in merged_df.columns: # Check if column exists before trying to access
+                features_for_inference[ws_col] = merged_df.loc[missing_mask, ws_col]
+        for t_col in current_t_cols:
+            if t_col in merged_df.columns:
+                features_for_inference[t_col] = merged_df.loc[missing_mask, t_col]
 
         # Forward-fill capacity for missing rows
-        features['WindPowerCapacityMW'] = merged_df.loc[missing_mask, 'WindPowerCapacityMW'].ffill()
+        if 'WindPowerCapacityMW' in merged_df.columns:
+             features_for_inference['WindPowerCapacityMW'] = merged_df.loc[missing_mask, 'WindPowerCapacityMW'].ffill()
+        else:
+            logger.warning("WindPowerCapacityMW not found in merged_df for inference features.")
+            # Decide how to handle: error, or add NaNs. For now, XGBoost can handle NaNs if column is expected.
+            # features_for_inference['WindPowerCapacityMW'] = np.nan # if model expects it
 
         # Basic stats from the ws columns
-        features['Avg_WindSpeed'] = merged_df.loc[missing_mask, ws_cols].mean(axis=1)
-        features['WindSpeed_Variance'] = merged_df.loc[missing_mask, ws_cols].var(axis=1)
+        if current_ws_cols: # Ensure current_ws_cols is not empty
+            features_for_inference['Avg_WindSpeed'] = merged_df.loc[missing_mask, current_ws_cols].mean(axis=1)
+            features_for_inference['WindSpeed_Variance'] = merged_df.loc[missing_mask, current_ws_cols].var(axis=1)
+        else: # Handle case where there are no ws_cols (e.g. all are NaN or missing)
+            features_for_inference['Avg_WindSpeed'] = np.nan
+            features_for_inference['WindSpeed_Variance'] = np.nan
 
-        X_missing_df = pd.DataFrame(features)
+        X_missing_df = pd.DataFrame(features_for_inference)
+
         if not X_missing_df.empty:
-            # Filter trained_columns to only include columns present in X_missing_df
-            trained_columns = [col for col in trained_columns if col in X_missing_df.columns]
-            X_missing_df = X_missing_df[sorted(trained_columns)]  # Reorder columns to match training
+            model_feature_names = ws_model.feature_names_in_
+            for col in model_feature_names:
+                if col not in X_missing_df.columns:
+                    X_missing_df[col] = np.nan
+            
+            X_missing_df = X_missing_df[model_feature_names]
 
             # Predict with XGB
             raw_preds = ws_model.predict(X_missing_df)

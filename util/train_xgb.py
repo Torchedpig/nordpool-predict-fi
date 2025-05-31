@@ -11,11 +11,25 @@ import pytz
 from .logger import logger
 
 def train_model(df, fmisid_ws, fmisid_t):
+    if df.empty:
+        logger.error("Input DataFrame to train_model is empty. Skipping price model training.")
+        return None
+
+    # Ensure the target variable 'Price_cpkWh' exists and drop rows where it's NaN
+    if 'Price_cpkWh' not in df.columns:
+        logger.error("'Price_cpkWh' column is missing from the DataFrame. Skipping price model training.")
+        return None
+    
+    df = df.dropna(subset=['Price_cpkWh'])
+    if df.empty:
+        logger.error("DataFrame is empty after dropping rows with NaN Price_cpkWh. Skipping price model training.")
+        return None
         
-    logger.info(f"Training a pricing model")
+    logger.info(f"Starting price model training with {len(df)} rows after initial NaN drop.")
     
     # Drop the target column from training data
-    df = df.drop(columns=['PricePredict_cpkWh'])
+    if 'PricePredict_cpkWh' in df.columns:
+        df = df.drop(columns=['PricePredict_cpkWh'])
 
     # Process timestamp
     df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -34,19 +48,46 @@ def train_model(df, fmisid_ws, fmisid_t):
     df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
     df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
 
-    # Calculate temp_mean and temp_variance
-    df['temp_mean'] = df[fmisid_t].mean(axis=1)
-    df['temp_variance'] = df[fmisid_t].var(axis=1)
+    # Calculate temp_mean and temp_variance using provided fmisid_t columns
+    # Ensure fmisid_t contains columns that actually exist in df and have some data
+    valid_fmisid_t = [col for col in fmisid_t if col in df.columns and df[col].notna().any()]
+    if valid_fmisid_t:
+        df['temp_mean'] = df[valid_fmisid_t].mean(axis=1)
+        df['temp_variance'] = df[valid_fmisid_t].var(axis=1)
+    else:
+        df['temp_mean'] = pd.NA # Or np.nan, consistent with how missing data is handled
+        df['temp_variance'] = pd.NA
+
+    # Ensure fmisid_ws contains columns that actually exist in df
+    valid_fmisid_ws = [col for col in fmisid_ws if col in df.columns and df[col].notna().any()]
 
     # Feature selection
-    X_filtered = df[[
+    _feature_columns_initial = [ # Temporary name for the list that might contain duplicates
         'year', 'day_of_week_sin', 'day_of_week_cos', 'hour_sin', 'hour_cos', 
         'NuclearPowerMW', 'ImportCapacityMW', 'WindPowerMW', 
         'temp_mean', 'temp_variance', 'holiday', 
         'sum_irradiance', 'mean_irradiance', 'std_irradiance', 'min_irradiance', 'max_irradiance',
         'SE1_FI', 'SE3_FI', 'EE_FI',
-        'eu_ws_EE01', 'eu_ws_EE02', 'eu_ws_DK01', 'eu_ws_DK02', 'eu_ws_DE01', 'eu_ws_DE02', 'eu_ws_SE01', 'eu_ws_SE02', 'eu_ws_SE03', # 'volatile_likelihood'
-    ] + fmisid_t + fmisid_ws]
+        'eu_ws_EE01', 'eu_ws_EE02', 'eu_ws_DK01', 'eu_ws_DK02', 'eu_ws_DE01', 'eu_ws_DE02', 'eu_ws_SE01', 'eu_ws_SE02', 'eu_ws_SE03',
+        # 'volatile_likelihood' # This is added later in the main script if used
+    ] + valid_fmisid_t + valid_fmisid_ws
+
+    # Deduplicate _feature_columns_initial while preserving order of first appearance
+    seen_columns = set()
+    feature_columns = [] # This will be the final, deduplicated list
+    for col_name in _feature_columns_initial:
+        if col_name not in seen_columns:
+            feature_columns.append(col_name)
+            seen_columns.add(col_name)
+    
+    # Ensure all selected feature columns exist in df, drop if not (e.g. temp_mean/var if no valid_fmisid_t)
+    # Use the unique, ordered list of feature column names (now named 'feature_columns')
+    X_filtered = df[[col for col in feature_columns if col in df.columns]].copy()
+    
+    # If temp_mean or temp_variance were not created (because valid_fmisid_t was empty),
+    # they might be missing from X_filtered. XGBoost can handle NaNs if they are present.
+    # If they are entirely missing as columns and were expected, this could be an issue,
+    # but the current setup should ensure they are present (possibly as all NaNs).
 
     # Target variable
     y_filtered = df['Price_cpkWh']
@@ -147,27 +188,24 @@ def train_model(df, fmisid_ws, fmisid_t):
 
     # Perform random sampling and evaluation 10 times
     for _ in range(10):
-        random_sample = df.sample(n=500, random_state=None)
+        random_sample = df.sample(n=500, random_state=None) # Sample from the original df passed to train_model
         
-        # Compute cyclical features
+        # Compute cyclical features for the sample
         random_sample['day_of_week_sin'] = np.sin(2 * np.pi * random_sample['day_of_week'] / 7)
         random_sample['day_of_week_cos'] = np.cos(2 * np.pi * random_sample['day_of_week'] / 7)
         random_sample['hour_sin'] = np.sin(2 * np.pi * random_sample['hour'] / 24)
         random_sample['hour_cos'] = np.cos(2 * np.pi * random_sample['hour'] / 24)
 
-        # Compute temp_mean and temp_variance
-        random_sample['temp_mean'] = random_sample[fmisid_t].mean(axis=1)
-        random_sample['temp_variance'] = random_sample[fmisid_t].var(axis=1)
+        # Compute temp_mean and temp_variance for the sample, using the same valid FMI columns
+        if valid_fmisid_t:
+            random_sample['temp_mean'] = random_sample[valid_fmisid_t].mean(axis=1)
+            random_sample['temp_variance'] = random_sample[valid_fmisid_t].var(axis=1)
+        else:
+            random_sample['temp_mean'] = pd.NA
+            random_sample['temp_variance'] = pd.NA
         
-        # Match the feature selection used for training
-        X_random_sample = random_sample[[
-            'year','day_of_week_sin', 'day_of_week_cos', 'hour_sin', 'hour_cos',
-            'NuclearPowerMW', 'ImportCapacityMW', 'WindPowerMW',
-            'temp_mean', 'temp_variance', 'holiday',
-            'sum_irradiance', 'mean_irradiance', 'std_irradiance', 'min_irradiance', 'max_irradiance',
-            'SE1_FI', 'SE3_FI', 'EE_FI',
-            'eu_ws_EE01', 'eu_ws_EE02', 'eu_ws_DK01', 'eu_ws_DK02', 'eu_ws_DE01', 'eu_ws_DE02', 'eu_ws_SE01', 'eu_ws_SE02', 'eu_ws_SE03', # 'volatile_likelihood'
-        ] + fmisid_t + fmisid_ws]
+        # Match the feature selection used for training, ensuring columns exist in random_sample
+        X_random_sample = random_sample[[col for col in feature_columns if col in random_sample.columns]].copy()
         
         y_random_sample_true = random_sample['Price_cpkWh']
         y_random_sample_pred = xgb_model.predict(X_random_sample)

@@ -122,19 +122,24 @@ def get_history(fmisid, start_date, parameters, end_date=None):
         response = requests.get(base_url, params=params)
         if response.status_code != 200:
             logger.info(f"[WARNING] Failed to fetch historical data for FMISID {fmisid} ({start_date} to {end_date}): {response.text}")
+            # Return an empty DataFrame or raise a specific exception if preferred
+            return pd.DataFrame() # Or raise FMIAPIFailureException(f"Failed with status {response.status_code}")
             
         if not response.content:
             logger.info(f"[WARNING] Empty response from FMI API for FMISID {fmisid} history ({start_date} to {end_date})")
+            return pd.DataFrame() # Or raise FMIAPINoDataException("Empty response content")
             
         root = etree.fromstring(response.content)
         if len(root.findall('.//BsWfs:BsWfsElement', namespaces=root.nsmap)) == 0:
             logger.info(f"[WARNING] No historical data found for FMISID {fmisid} ({start_date} to {end_date})")
+            return pd.DataFrame() # Or raise FMIAPINoDataException("No data elements found in response")
             
     except requests.RequestException as e:
-        logger.info(f"[WARNING] Error fetching historical data from FMI for FMISID {fmisid} ({start_date} to {end_date}): {e}")
-        sys.exit(1)
+        logger.error(f"[ERROR] Error fetching historical data from FMI for FMISID {fmisid} ({start_date} to {end_date}): {e}")
+        raise  # Re-raise the exception to be handled by the caller
     except etree.XMLSyntaxError as e:
-        logger.info(f"[WARNING] Error parsing XML from FMI response for FMISID {fmisid}: {e}")
+        logger.error(f"[ERROR] Error parsing XML from FMI response for FMISID {fmisid} ({start_date} to {end_date}): {e}")
+        raise # Re-raise the exception to be handled by the caller
 
     # Let's not spam the FMI API
     time.sleep(0.1)

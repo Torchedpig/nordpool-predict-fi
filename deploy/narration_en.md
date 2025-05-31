@@ -1,19 +1,21 @@
-*Electricity price forecasts for next week are generally moderate, but the higher price forecasts for Thursday and Friday, as well as the risk of price spikes over the weekend, should be noted.*
+*Next week's electricity price forecasts vary moderately, with Tuesday standing out with a higher average price and lower wind power production. The other days are predicted to be more affordable or stable.*
 
-The electricity price forecast was updated on Sunday at 18:23.
+Olkiluoto 2 nuclear power plant is undergoing maintenance from May 25, 2025, at 6 PM to June 15, 2025, at 6 PM. This maintenance may affect the accuracy of the price forecast, as limited training data is available during maintenance periods.
 
-| <pv>  | average<br>price<br>¢/kWh | min - max<br>¢/kWh | wind power<br>min - max<br>MW | average<br>temperature<br>°C |
+The forecast was updated on Sunday at 12:23 PM.
+
+|  | average<br>price<br>¢/kWh | min - max<br>¢/kWh | wind power<br>min - max<br>MW | average<br>temperature<br>°C |
 |:-------------|:----------------:|:----------------:|:-------------:|:-------------:|
-| **Monday** | 0.2 | -0.0 - 0.4 | 2644 - 4311 | 9.4 |
-| **Tuesday** | -0.1 | -1.0 - 1.7 | 1988 - 4479 | 10.7 |
-| **Wednesday** | 0.8 | -1.2 - 2.8 | 2116 - 4557 | 10.9 |
-| **Thursday** | 2.2 | -0.0 - 4.4 | 1250 - 2278 | 10.8 |
-| **Friday** | 1.9 | 0.3 - 5.3 | 1582 - 2368 | 10.4 |
-| **Saturday** | 0.2 | -1.5 - 1.6 | 1741 - 2518 | 9.8 |
-| **Sunday** | 0.3 | -0.8 - 1.8 | 1721 - 2568 | 10.0 |
+| **Sunday** | -0.4 | -1.2 - 1.8 | 738 - 3731 | 10.0 |
+| **Monday** | -0.1 | -1.1 - 1.3 | 1679 - 4501 | 10.1 |
+| **Tuesday** | 2.5 | -0.3 - 9.5 | 231 - 2187 | 9.9 |
+| **Wednesday** | -0.2 | -1.7 - 1.4 | 1829 - 2379 | 11.5 |
+| **Thursday** | 1.7 | -0.6 - 5.4 | 1224 - 2280 | 12.2 |
+| **Friday** | 1.6 | -0.7 - 6.7 | 1229 - 2157 | 11.7 |
+| **Saturday** | 0.3 | -1.2 - 2.0 | 1675 - 2440 | 11.5 |
 
-The electricity price expectations for next week are mostly moderate. **Tuesday** has the clearly lowest forecast, with an average price of -0.1 ¢/kWh. The price expectation for **Wednesday** is also favorable, with an average of 0.8 ¢/kWh. On **Thursday**, the price expectation rises significantly, to an average of 2.2 ¢/kWh, partly due to lower wind power production. The day's minimum production is 1250 MW and the maximum 2278 MW. **Friday**’s price expectation remains at a high level, averaging 1.9 ¢/kWh. The price expectations for **Saturday** and **Sunday** are again more moderate, averaging 0.2 ¢/kWh and 0.3 ¢/kWh, respectively.
+Next **Sunday**, electricity price expectations are between -1.2 and 1.8 cents per kilowatt-hour, and the day’s average price is -0.4 ¢/kWh. Next **Monday**, price expectations are between -1.1 and 1.3 ¢/kWh, and the day’s average price is -0.1 ¢/kWh. On **Tuesday**, price expectations vary significantly, between -0.3 and 9.5 ¢/kWh, and the day’s average price is 2.5 ¢/kWh. On **Wednesday**, price expectations are between -1.7 and 1.4 ¢/kWh, and the day’s average price is -0.2 ¢/kWh. On **Thursday**, price expectations are between -0.6 and 5.4 ¢/kWh, and the average price is 1.7 ¢/kWh. Next **Friday**, price expectations are between -0.7 and 6.7 ¢/kWh, and the day’s average price is 1.6 ¢/kWh. Next **Saturday**, price expectations are between -1.2 and 2.0 ¢/kWh, and the day’s average price is 0.3 ¢/kWh.
 
-There is a risk of price spikes on **Thursday**, **Friday**, **Saturday** and **Sunday**, during individual hours. For example, between 16:00-18:00 on **Thursday** and **Friday**, higher prices than forecast may occur.
+During the week, **Tuesday** stands out with its higher average price of 2.5 ¢/kWh. The day’s maximum price could rise to as high as 9.5 ¢/kWh. Lower wind power production, averaging 1175 MW, may explain the higher price level. On the other days, price expectations are mostly lower, and average prices move below 2 ¢/kWh. The largest fluctuations during the day may occur during the morning and evening hours.
 
-*Numbers were interpreted today by google/gemma-3-27b-it.* ✨
+*Numbers were interpreted today by google/gemma-3-27b-it.* 💡

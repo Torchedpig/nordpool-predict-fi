@@ -2,6 +2,22 @@
 
 All notable changes will be documented in this file.
 
+## [2025-05-31] - FMI Data Handling, Model Refinements, and Utilities
+### Changed
+- **Wind Power Model Feature Selection:**
+  - Wind speed data (`ws_` columns) selection is now controlled by the `FMISID_WS` environment variable, supplemented by all `eu_ws_` columns.
+  - Temperature data (`t_` columns) for the wind power model is sourced from FMI stations common to both `FMISID_WS` and `FMISID_T` environment variables.
+  - Implemented fallback logic: If `FMISID_WS` is not set, the wind power model uses all available `ws_`, `eu_ws_`, and `t_` columns.
+- **Price Model Feature Selection:** Continues to use temperature data from `FMISID_T` and wind speed data from `FMISID_WS`.
+- **Dynamic FMI Column Handling:** Improved database schema management and data loading processes to dynamically adapt to FMI stations defined in environment variables. This includes `ALTER TABLE` operations for existing databases.
+- Ensured feature consistency between model training and prediction phases to resolve `feature_names mismatch` errors, particularly for the price model.
+### Added
+- **Automated FMI Data Backfill:** Implemented an automated mechanism to backfill historical data for newly added FMI stations, ensuring data integrity for model training.
+- **Manual FMI Data Backfill Utility:** Added `util/backfill_fmi_data.py` script to manually fetch and store historical data for FMI stations. This can be used for initial data population or specific date ranges if needed.
+- **Docker Build Optimization:** Added `.dockerignore` file to reduce Docker image size by excluding unnecessary files.
+### Fixed
+- Resolved `ValueError: feature_names mismatch` during price model predictions by aligning prediction features with the trained model\'s `feature_names_in_`.
+
 ## [2025-05-25] - Dockerization and Fork Update
 ### Added
 - Docker support with a new Dockerfile and docker-compose.yaml to orchestrate two services:

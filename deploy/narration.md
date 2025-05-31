@@ -1,22 +1,21 @@
-*Sähkön hintaodotukset ensi viikolle ovat pääosin maltilliset, mutta torstain ja perjantain korkeammat hintaennusteet sekä viikonlopun hintapiikkien riski kannattaa huomioida.*
+*Seuraavan viikon sähkönhintaodotukset vaihtelevat maltillisesti, tiistain erottuessa korkeammalla keskihinnalla ja alhaisemmalla tuulivoiman tuotannolla. Muut päivät ennustetaan edullisemmiksi tai tasaisiksi.*
 
-Olkiluoto 2 -ydinvoimalassa on huoltokatko 25.5.2025 klo 18 - 15.6.2025 klo 18. Huoltokatko voi vaikuttaa hintaennusteen tarkkuuteen, koska opetusdataa on huoltokatkojen ajalta saatavilla rajallisesti.
+Olkiluoto 2 -ydinvoimalassa on huoltokatko 25.5.2025 klo 18 – 15.6.2025 klo 18. Huoltokatko voi vaikuttaa hintaennusteen tarkkuuteen, sillä opetusdataa on huoltokatkojen ajalta saatavilla rajallisesti.
 
-Pörssisähkön hintaennuste on päivitetty sunnuntaina klo 18:23.
+Ennuste on päivitetty sunnuntaina klo 12:23.
 
-| <pv>  | keski-<br>hinta<br>¢/kWh | min - max<br>¢/kWh | tuulivoima<br>min - max<br>MW | keski-<br>lämpötila<br>°C |
+|  | keski-<br>hinta<br>¢/kWh | min - max<br>¢/kWh | tuulivoima<br>min - max<br>MW | keski-<br>lämpötila<br>°C |
 |:-------------|:----------------:|:----------------:|:-------------:|:-------------:|
-| **maanantaina** | 0.2 | -0.0 - 0.4 | 2644 - 4311 | 9.4 |
-| **tiistaina** | -0.1 | -1.0 - 1.7 | 1988 - 4479 | 10.7 |
-| **keskiviikkona** | 0.8 | -1.2 - 2.8 | 2116 - 4557 | 10.9 |
-| **torstaina** | 2.2 | -0.0 - 4.4 | 1250 - 2278 | 10.8 |
-| **perjantaina** | 1.9 | 0.3 - 5.3 | 1582 - 2368 | 10.4 |
-| **lauantaina** | 0.2 | -1.5 - 1.6 | 1741 - 2518 | 9.8 |
-| **sunnuntaina** | 0.3 | -0.8 - 1.8 | 1721 - 2568 | 10.0 |
+| **sunnuntai** | -0.4 | -1.2 - 1.8 | 738 - 3731 | 10.0 |
+| **maanantai** | -0.1 | -1.1 - 1.3 | 1679 - 4501 | 10.1 |
+| **tiistai** | 2.5 | -0.3 - 9.5 | 231 - 2187 | 9.9 |
+| **keskiviikko** | -0.2 | -1.7 - 1.4 | 1829 - 2379 | 11.5 |
+| **torstai** | 1.7 | -0.6 - 5.4 | 1224 - 2280 | 12.2 |
+| **perjantai** | 1.6 | -0.7 - 6.7 | 1229 - 2157 | 11.7 |
+| **lauantai** | 0.3 | -1.2 - 2.0 | 1675 - 2440 | 11.5 |
 
-Ensi viikolla sähkön hintaodotukset ovat pääosin maltilliset. **Tiistaina** hintaennuste on selvästi alhaisin, keskihinnan ollessa -0.1 ¢/kWh. **Keskiviikkona** hintaodotus on myös edullinen, keskihinnan ollessa 0.8 ¢/kWh. **Torstaina** hintaodotus nousee selvästi, keskihinnan ollessa 2.2 ¢/kWh, mikä johtuu osittain matalammasta tuulivoiman tuotannosta. Päivän minimituotanto on 1250 MW ja maksimi 2278 MW. **Perjantaina** hintaodotus on edelleen korkealla tasolla, keskihinnan ollessa 1.9 ¢/kWh. **Lauantain** ja **sunnuntain** hintaodotukset ovat jälleen maltillisemmat, keskihintojen ollessa 0.2 ¢/kWh ja 0.3 ¢/kWh vastaavasti. 
+Ensi **sunnuntaina** pörssisähkön hintaodotukset ovat -1,2 ja 1,8 senttiä kilowattitunnilta, ja päivän keskihinta on -0,4 ¢/kWh. Ensi **maanantaina** hintaodotukset ovat -1,1 ja 1,3 ¢/kWh, ja päivän keskihinta on -0,1 ¢/kWh. **Tiistaina** hintaodotukset vaihtelevat merkittävästi, -0,3 ja 9,5 ¢/kWh välillä, ja päivän keskihinta on 2,5 ¢/kWh. **Keskiviikkona** hintaodotukset ovat -1,7 ja 1,4 ¢/kWh, ja päivän keskihinta on -0,2 ¢/kWh. **Torstaina** hintaodotukset ovat -0,6 ja 5,4 ¢/kWh, ja päivän keskihinta on 1,7 ¢/kWh. Ensi **perjantaina** hintaodotukset ovat -0,7 ja 6,7 ¢/kWh, ja päivän keskihinta on 1,6 ¢/kWh. Ensi **lauantaina** hintaodotukset ovat -1,2 ja 2,0 ¢/kWh, ja päivän keskihinta on 0,3 ¢/kWh.
 
-Hintapiikeille on riski **torstaina**, **perjantaina**, **lauantaina** ja **sunnuntaina**, yksittäisten tuntien aikana. Esimerkiksi **torstaina** klo 16-18 ja **perjantaina** klo 16-18 voi esiintyä korkeampia hintoja kuin ennusteessa on esitetty.
+Viikon aikana **tiistai** erottuu selvästi korkeammalla keskihinnallaan, 2,5 ¢/kWh. Päivän maksimihinta voi nousta jopa 9,5 ¢/kWh:hon. Alhaisempi tuulivoiman tuotanto, keskimäärin 1175 MW, voi selittää korkeampaa hintatasoa. Muina päivinä hintaodotukset ovat pääosin alhaisemmat, ja keskihinnat liikkuvat alle 2 ¢/kWh:n. Päivän sisällä suurimmat vaihtelut voivat sijoittua aamun ja illan tunteihin.
 
-*Numeroita analysoi tänään google/gemma-3-27b-it.* ✨
-
+*Numeroita tulkitsi tänään google/gemma-3-27b-it.* 💡

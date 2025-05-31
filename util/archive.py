@@ -67,13 +67,42 @@ def _get_table_columns(conn, table_name):
         return []
 
 
+def _ensure_archive_tables_exist(conn):
+    """
+    Ensures that prediction_runs and archived_predictions tables exist, creating them if necessary.
+    This uses a simplified schema for archived_predictions, and columns will be added dynamically.
+    """
+    cur = conn.cursor()
+    # Create prediction_runs table if it doesn't exist
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS prediction_runs (
+            run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_datetime TEXT NOT NULL
+        )
+    """)
+    # Create archived_predictions table if it doesn't exist with essential columns
+    # FMI station and other specific columns will be added dynamically
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS archived_predictions (
+            archive_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            timestamp TEXT NOT NULL,
+            PricePredict_cpkWh REAL NOT NULL,
+            Price_cpkWh REAL,
+            WindPowerCapacityMW REAL,
+            NuclearPowerMW REAL,
+            FOREIGN KEY(run_id) REFERENCES prediction_runs(run_id),
+            UNIQUE(run_id, timestamp)
+        )
+    """)
+    conn.commit()
+    cur.close()
+
+
 def insert_snapshot(db_path, df):
     """
     Insert a new snapshot run and its forecasts into the archive.
-    
-    Creates a new entry in prediction_runs and inserts the DataFrame rows
-    into archived_predictions. Only columns that exist in the database
-    table will be used; any additional columns will be dropped.
+    Tables and columns are created dynamically if they don't exist.
     
     Parameters:
     - db_path: Path to the SQLite database
@@ -89,6 +118,7 @@ def insert_snapshot(db_path, df):
     try:
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
+        _ensure_archive_tables_exist(conn) # Ensure tables are created first
     except sqlite3.Error as e:
         logger.error(f"SQLite connection error in insert_snapshot: {e}", exc_info=True)
         sys.exit(1)
@@ -106,41 +136,58 @@ def insert_snapshot(db_path, df):
         insert_df['timestamp'] = insert_df['timestamp'].apply(normalize_timestamp)
         
         # Get the list of columns in the archived_predictions table
-        table_columns = _get_table_columns(conn, "archived_predictions")
+        current_table_columns = _get_table_columns(conn, "archived_predictions")
+        
+        # Dynamically add new columns from the DataFrame if they don't exist in the table
+        for col_name in insert_df.columns:
+            if col_name not in current_table_columns and col_name not in ['run_id', 'archive_id']:
+                # Enclose column names in double quotes
+                cur.execute(f'ALTER TABLE archived_predictions ADD COLUMN "{col_name}" REAL')
+                logger.info(f'Added column "{col_name}" to archived_predictions table.')
+        conn.commit() # Commit column additions
+
+        # Refresh table columns after potential additions
+        table_columns_for_insert = _get_table_columns(conn, "archived_predictions")
         
         # Filter insert_df to include only columns in the table (plus run_id)
-        available_columns = [col for col in insert_df.columns if col in table_columns or col == 'run_id']
-        available_columns = [col for col in available_columns if col != 'archive_id']  # Remove auto-increment column
+        # Exclude archive_id as it's auto-incrementing
+        available_df_columns = [col for col in insert_df.columns if col in table_columns_for_insert and col != 'archive_id']
         
         # Check if we have at least timestamp and PricePredict_cpkWh
         required_columns = ['timestamp', 'PricePredict_cpkWh']
-        missing_columns = [col for col in required_columns if col not in available_columns]
-        if missing_columns:
-            logger.error(f"Required columns missing: {missing_columns}")
+        missing_required_df_cols = [col for col in required_columns if col not in available_df_columns]
+        if missing_required_df_cols:
+            logger.error(f"Required columns missing from DataFrame/Table: {missing_required_df_cols}")
             conn.rollback()
             return None
         
-        # Prepare for insertion
-        insert_columns = ', '.join(available_columns + ['run_id'])
-        placeholders = ', '.join(['?'] * (len(available_columns) + 1))
+        # Prepare for insertion: columns in DB table order, plus run_id
+        # We need to ensure the order of values matches the order of columns in the INSERT statement
+        # The columns for the INSERT statement will be the ones present in the DataFrame AND the table.
+        cols_for_sql_insert = available_df_columns + ['run_id']
+        insert_columns_str = ', '.join(f'"{c}"' for c in cols_for_sql_insert) # Quote all column names
+        placeholders = ', '.join(['?'] * len(cols_for_sql_insert))
         
         # Prepare and execute bulk insert
-        values = []
+        values_to_insert = []
         for _, row in insert_df.iterrows():
-            row_values = [row[col] if col in row else None for col in available_columns]
-            row_values.append(run_id)
-            values.append(tuple(row_values))
+            row_values = []
+            for col_name in available_df_columns: # Iterate in the order of columns we decided for SQL
+                row_values.append(row.get(col_name, None)) # Use .get for safety, though columns should exist
+            row_values.append(run_id) # Add run_id at the end
+            values_to_insert.append(tuple(row_values))
         
-        cur.executemany(
-            f"INSERT OR IGNORE INTO archived_predictions ({insert_columns}) VALUES ({placeholders})",
-            values
-        )
+        if values_to_insert:
+            cur.executemany(
+                f"INSERT OR IGNORE INTO archived_predictions ({insert_columns_str}) VALUES ({placeholders})",
+                values_to_insert
+            )
         
         # Commit and close
         conn.commit()
         
         # Log summary
-        logger.info(f"→ Inserted new prediction run (ID: {run_id}) with {len(values)} predictions")
+        logger.info(f"→ Inserted new prediction run (ID: {run_id}) with {len(values_to_insert)} predictions into archive")
         return run_id
         
     except Exception as e:
@@ -175,6 +222,8 @@ def get_predictions(db_path, df):
         
     try:
         conn = sqlite3.connect(db_path)
+        # Ensure tables exist before querying, important if DB was just created
+        _ensure_archive_tables_exist(conn) 
     except sqlite3.Error as e:
         logger.error(f"SQLite connection error in get_predictions: {e}", exc_info=True)
         sys.exit(1)
@@ -244,6 +293,8 @@ def compute_error(db_path, df):
     
     try:
         conn = sqlite3.connect(db_path)
+        # Ensure tables exist before querying
+        _ensure_archive_tables_exist(conn) 
         
         # Process each range
         for i, row in result_df.iterrows():
@@ -310,6 +361,8 @@ def get_run_info(db_path, run_id=None):
     """
     try:
         conn = sqlite3.connect(db_path)
+        # Ensure tables exist before querying
+        _ensure_archive_tables_exist(conn) 
         
         if run_id is not None:
             query = """

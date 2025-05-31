@@ -26,6 +26,7 @@ from util.volatility_xgb import train_volatility_model, predict_daily_volatility
 # from util.volatility_bayes import train_volatility_model, predict_daily_volatility
 from util.scaler import scale_predicted_prices
 from util.logger import logger
+from util.backfill_fmi_data import check_and_perform_backfill # New import
 
 # Wind power model choices: nn vs xgb
 # from util.fingrid_windpower_nn import update_windpower
@@ -65,6 +66,16 @@ try:
     fmisid_t_env = get_mandatory_env_variable('FMISID_T')
     fmisid_ws = ['ws_' + id for id in fmisid_ws_env.split(',')]
     fmisid_t = ['t_' + id for id in fmisid_t_env.split(',')]
+
+    # ---- Call FMI Backfill Check ----
+    # This should be called early, after env vars are loaded and before DB is heavily used.
+    logger.info("Checking if FMI data backfill is needed for new stations...")
+    backfill_fmi_check_performed = check_and_perform_backfill()
+    if backfill_fmi_check_performed:
+        logger.info("FMI backfill process finished. Continuing with main script.")
+    else:
+        logger.info("No FMI backfill was needed or performed. Continuing with main script.")
+    # ---- End FMI Backfill Check ----
 
 except ValueError as e:
     logger.error(f"Error: {e}", exc_info=True)
@@ -145,6 +156,14 @@ if args.predict:
     future_index = pd.date_range(start=start_time, end=end_time, freq='h')
     df_recent = df_recent.reindex(df_recent.index.union(future_index))
 
+    # Ensure all FMI columns from .env.local (loaded into fmisid_ws and fmisid_t)
+    # exist in df_recent before attempting to select them.
+    # If a column is missing (e.g., new FMI station ID, or empty DB), add it with NA.
+    expected_fmi_columns = list(set(fmisid_ws + fmisid_t))
+    for col_name in expected_fmi_columns:
+        if col_name not in df_recent.columns:
+            df_recent[col_name] = pd.NA # Requires pandas to be imported as pd
+
     # Since FMI can remove weather stations from their API without notice, we should rely on .env.local
     # rather than the database as the source of truth. Filter df_recent to include only columns
     # corresponding to specified FMI weather station/temperature IDs, or columns that do not have
@@ -156,6 +175,14 @@ if args.predict:
     # Reset the index to turn 'timestamp' back into a column before the update functions
     df_recent.reset_index(inplace=True)
     df_recent.rename(columns={'index': 'timestamp'}, inplace=True)
+
+    # Determine actual FMI columns present in df_recent that have some non-NA data
+    # These will be used for feature engineering and direct inclusion in the model
+    actual_fmisid_t_in_recent = [col for col in df_recent.columns if col.startswith('t_') and df_recent[col].notna().any()]
+    actual_fmisid_ws_in_recent = [col for col in df_recent.columns if col.startswith('ws_') and df_recent[col].notna().any()]
+
+    logger.info(f"Actual FMI temperature columns for recent data processing: {actual_fmisid_t_in_recent}")
+    logger.info(f"Actual FMI wind speed columns for recent data processing: {actual_fmisid_ws_in_recent}")
 
     # region [updates]
     # Update wind speed and temperature data
@@ -219,10 +246,25 @@ if args.predict:
     df_full['NuclearPowerMW'] = df_full['NuclearPowerMW'].ffill()
     df_full['ImportCapacityMW'] = df_full['ImportCapacityMW'].ffill()
 
-    required_columns = [
-        'timestamp', 'NuclearPowerMW', 'ImportCapacityMW', 'Price_cpkWh', 'WindPowerMW', 'holiday', 'sum_irradiance', 'mean_irradiance', 'std_irradiance', 'min_irradiance', 'max_irradiance', # 'volatile_likelihood'
-    ] + fmisid_t + fmisid_ws
-    df_full = df_full.dropna(subset=required_columns)
+    # Define essential columns that MUST have data for a row to be useful for training.
+    # Individual FMI columns (fmisid_t, fmisid_ws) are excluded here.
+    # Their historical data (or lack thereof for new stations) will be handled
+    # by the feature engineering (mean/variance) within the train_model function.
+    essential_training_columns = [
+        'Price_cpkWh',        # Target variable
+        'NuclearPowerMW',     # Feature
+        'ImportCapacityMW',   # Feature
+        'WindPowerMW',        # Feature (output of wind model, essential input here)
+        'holiday',            # Feature
+        'sum_irradiance',     # Feature
+        'mean_irradiance',    # Feature
+        'std_irradiance',     # Feature
+        'min_irradiance',     # Feature
+        'max_irradiance',     # Feature
+        # 'timestamp' is the index or a well-maintained column, typically not NaN.
+        # 'volatile_likelihood' is added after this dropna step.
+    ]
+    df_full = df_full.dropna(subset=essential_training_columns)
 
     # Train the pricing model
     logger.debug("Training the model with updated data")
@@ -246,12 +288,16 @@ if args.predict:
     df_recent['hour_sin'] = np.sin(2 * np.pi * df_recent['hour'] / 24)
     df_recent['hour_cos'] = np.cos(2 * np.pi * df_recent['hour'] / 24)
 
-    # Calculate temp_mean and temp_variance
-    df_recent['temp_mean'] = df_recent[fmisid_t].mean(axis=1)
-    df_recent['temp_variance'] = df_recent[fmisid_t].var(axis=1)
+    # Calculate temp_mean and temp_variance using actual FMI columns in df_recent
+    if actual_fmisid_t_in_recent:
+        df_recent['temp_mean'] = df_recent[actual_fmisid_t_in_recent].mean(axis=1)
+        df_recent['temp_variance'] = df_recent[actual_fmisid_t_in_recent].var(axis=1)
+    else:
+        df_recent['temp_mean'] = pd.NA # Or np.nan, ensure consistency
+        df_recent['temp_variance'] = pd.NA
 
     # region [predict]
-    # Define prediction features
+    # Define prediction features dynamically based on actual available FMI columns
     prediction_features = [
         'year', 'day_of_week_sin', 'day_of_week_cos', 'hour_sin', 'hour_cos',
         'NuclearPowerMW', 'ImportCapacityMW', 'WindPowerMW',
@@ -259,12 +305,45 @@ if args.predict:
         'sum_irradiance', 'mean_irradiance', 'std_irradiance', 'min_irradiance', 'max_irradiance',
         'SE1_FI', 'SE3_FI', 'EE_FI',
         'eu_ws_EE01', 'eu_ws_EE02', 'eu_ws_DK01', 'eu_ws_DK02', 'eu_ws_DE01', 'eu_ws_DE02', 'eu_ws_SE01', 'eu_ws_SE02', 'eu_ws_SE03',
-        # 'volatile_likelihood'
-    ] + fmisid_t + fmisid_ws
+        # 'volatile_likelihood' # This is added by predict_daily_volatility if used
+    ] 
+    # Add FMI columns that are actually present and have data
+    prediction_features.extend(sorted(actual_fmisid_t_in_recent))
+    prediction_features.extend(sorted(actual_fmisid_ws_in_recent))
     
+    # Ensure all features in prediction_features exist in df_recent, especially temp_mean/variance if they were set to NA
+    # XGBoost can handle NaN values if the columns are present.
+    # If temp_mean/variance were set to pd.NA and the column wasn't created, ensure it is.
+    if 'temp_mean' not in df_recent.columns:
+        df_recent['temp_mean'] = pd.NA
+    if 'temp_variance' not in df_recent.columns:
+        df_recent['temp_variance'] = pd.NA
+
+    # Filter out any features that might not be in df_recent (e.g. if temp_mean/var were not added)
+    # This also ensures that if a fmisid column was all NA, it might not be in actual_fmisid... lists
+    # final_prediction_features = [feat for feat in prediction_features if feat in df_recent.columns]
+
+    # --- MODIFICATION START: Ensure prediction features match model's expected order and set ---
+    model_expected_features = model_trained.feature_names_in_
+    
+    # Ensure all columns expected by the model are present in df_recent, adding NaNs if not.
+    # This is crucial if a feature was present during training (even if all NaN for some rows)
+    # but somehow got dropped or was never created in df_recent for prediction.
+    for feature_name in model_expected_features:
+        if feature_name not in df_recent.columns:
+            logger.warning(f"Prediction data is missing feature '{feature_name}' expected by the model. Adding it as a column of NaNs.")
+            df_recent[feature_name] = pd.NA # Or np.nan
+            
+    # Select features for prediction IN THE ORDER THE MODEL EXPECTS THEM.
+    final_prediction_features = model_expected_features
+    # --- MODIFICATION END ---
+
+    logger.info(f"Features used for prediction (ordered as per model): {final_prediction_features}")
+
     # Predict the prices
     logger.info("Predicting prices with the trained model")
-    price_df = model_trained.predict(df_recent[prediction_features])
+    # Ensure df_recent[final_prediction_features] actually uses the list directly to preserve order
+    price_df = model_trained.predict(df_recent[list(final_prediction_features)])
     df_recent['PricePredict_cpkWh'] = price_df
 
     # region [scale]

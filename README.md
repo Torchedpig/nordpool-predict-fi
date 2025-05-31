@@ -44,6 +44,14 @@ All settings are controlled via environment variables. See `.env.local.template`
 **Timezone:**
 - `TZ`: Timezone for the container (default: `Europe/Helsinki`). You can override this in `.env.local` or `docker-compose.yaml` if needed. Example: `TZ=UTC`
 
+**FMI Station Configuration:**
+- `FMISID_T`: Comma-separated list of FMI station IDs used for temperature data by the **price prediction model**. The main prediction script will automatically attempt to backfill historical data for any new stations listed here that are not already in the database.
+- `FMISID_WS`: Comma-separated list of FMI station IDs used for wind speed data by both the **price and wind power prediction models**. Similar to `FMISID_T`, historical data for new stations will be automatically backfilled.
+  - The **wind power model** uses wind speed data (`ws_` columns) from FMI stations listed in `FMISID_WS` (plus all `eu_ws_` columns from other European sources).
+  - For temperature data (`t_` columns), the **wind power model** uses FMI stations that are common to *both* `FMISID_WS` and `FMISID_T`.
+  - If `FMISID_WS` is not set or is empty, the wind power model falls back to using all available `ws_` and `eu_ws_` columns for wind speed, and all available `t_` columns for temperature.
+- The system automatically handles the addition of new FMI stations by attempting to backfill historical data. For more control over backfilling (e.g., specific date ranges or for stations not yet added to `.env.local`), you can use the `util/backfill_fmi_data.py` script manually. Execute it from the project root: `python util/backfill_fmi_data.py`. This script will also use the `FMISID_T` and `FMISID_WS` variables from `.env.local` to identify stations if no specific stations are passed as arguments to the script.
+
 ---
 
 ## LLM Model Attribution
